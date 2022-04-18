@@ -1,4 +1,5 @@
 *.bash
 comp
-del
 icomp
+del
+*tree~
