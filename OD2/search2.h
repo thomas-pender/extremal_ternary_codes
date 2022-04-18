@@ -10,6 +10,7 @@
 # include <errno.h>
 # include <error.h>
 # include <stdint.h>
+# include <assert.h>
 
 # define DIM 2
 //# define STACK 512

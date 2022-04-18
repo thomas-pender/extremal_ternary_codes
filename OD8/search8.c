@@ -68,8 +68,8 @@ void print_mat(UINT **A, size_t nrows, size_t ncols)
 }
 
 static inline
-void **transpose(UINT *restrict A[restrict static 1],
-                 UINT *restrict B[restrict static 1])
+void transpose(UINT *restrict A[restrict static 1],
+               UINT *restrict B[restrict static 1])
 {
   size_t i,j,len=8*LEN,Len=16*LEN;
   for(i=0; i<Len; ++i)
