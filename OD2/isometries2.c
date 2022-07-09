@@ -304,7 +304,7 @@ void gauss_elim(size_t k, size_t len, size_t Len, size_t rank,
   matrix_free(len,(UINT**)A);
 }
 
-// canonical representative /////////////////////////////////////////////////////
+// order functions ///////////////////////////////////////////////////////////
 
 int colex(size_t len,
           UINT a[restrict static 1],
@@ -312,8 +312,8 @@ int colex(size_t len,
 {
   for(size_t i=len; i; --i){
     if(a[i-1] == b[i-1]) continue;
-    if(a[i-1] < b[i-1]) return 1;
-    return -1;
+    if(a[i-1] < b[i-1]) return -1;
+    return 1;
   }
   return 0;
 }
@@ -331,6 +331,93 @@ int lex(size_t i,
   }
   return 0;
 }
+
+// support signature ///////////////////////////////////////////////////////////
+
+MASK *support_generate(size_t i, size_t len, size_t Len, UINT **A)
+{
+  size_t j;
+  MASK span=0,row,*supports=(MASK*)malloc(Len*sizeof(MASK));
+
+  for(j=0; j<i; ++j){
+    supports[j]=matrix_row_support(j,len,A);
+    span |= supports[j];
+  }
+
+  for(size_t j=i; j<Len; ++j){
+    row=matrix_row_support(j,len,A);
+    if(row == (row & span))
+      supports[j]=row;
+    else
+      supports[j]=0ULL;
+  }
+
+  return supports;
+}
+
+int compare_support(void const *aa, void const *bb)
+{
+  MASK a=*(MASK*)aa, b=*(MASK*)bb;
+
+  if(a == 0) return 1;
+  if(b == 0) return -1;
+
+  if(a < b) return -1;
+  if(b < a) return 1;
+
+  return 0;
+}
+
+unsigned *support_sort(size_t Len,
+                       size_t nreps,
+                       unsigned reps[static 1],
+                       MASK supports[restrict static 1],
+                       MASK candidate[restrict static 1])
+{
+  size_t i,j;
+  unsigned *perm=(unsigned*)malloc(Len*sizeof(unsigned));
+
+  for(i=0; i<Len; candidate[i]=supports[i],++i);
+
+  for(i=0; i<nreps-1; ++i)
+    qsort(candidate+i,reps[i+1]-reps[i],sizeof(MASK),compare_support);
+
+  for(i=0; i<Len; ++i)
+    for(j=0; j<Len; ++j)
+      if(supports[i] == candidate[j]){
+        perm[i]=j;
+        break;
+      }
+
+  return perm;
+}
+
+unsigned *support_partition(size_t Len,
+                            size_t nreps,
+                            unsigned reps[static 1],
+                            size_t new_nreps[static 1],
+                            MASK candidate[static 1])
+{
+  size_t i,j,m,index;
+  unsigned *new_reps=(unsigned*)calloc((Len+1),sizeof(unsigned));
+
+  for(i=0,index=0; i<nreps-1; ++i){
+    new_reps[index++]=reps[i];
+    m=reps[i+1]-reps[i];
+    for(j=1; j<m; ++j){
+      if(candidate[j-1] != candidate[j]){
+        new_reps[index++]=reps[i]+j;
+        continue;
+      }
+    }
+  }
+  new_reps[index++]=Len;
+  *new_nreps=index;
+
+  return new_reps;
+}
+
+// canonization ////////////////////////////////////////////////////////////////
 
 void RC(size_t lam, size_t len, size_t Len,
         UINT *m[static 1], partition_t P[static 1])
@@ -424,9 +511,9 @@ void canonical_inner(size_t i, size_t len, size_t Len,
 
     check=lex(i,len,gamma,candidate);
 
-    if(*cand_check == 1 && check == -1)
-      continue;
     if(*cand_check == 1 && check == 1)
+      continue;
+    if(*cand_check == 1 && check == -1)
       *cand_check=0;
     if(i<Len)
       canonical_inner(i+1,len,Len,cand_check,candidate,gamma);
@@ -454,9 +541,11 @@ UINT **canonical(size_t len, size_t Len,
 int main(void)
 {
   size_t i,j,len=2*LEN,Len=4*LEN;
-  UINT a[]={1,1,1,1,},
-    b[]={1,1,1,1,},
+  UINT a[]={1,1,},
+    b[]={1,1,},
     **G=generator(a,b),**H;
+
+  H=canonical(len,Len,G);
 
   for(i=0; i<len; ++i){
     for(j=0; j<Len; printf("%2lu",G[j++][i]));
@@ -464,16 +553,50 @@ int main(void)
   }
   printf("\n");
 
-  H=canonical(len,Len,G);
+  MASK *sup=support_generate(len,len,Len,G);
+  sup[0]+=2;
 
   for(i=0; i<len; ++i){
-    for(j=0; j<Len; printf("%2lu",H[j++][i]));
+    for(j=0; j<Len; ++j){
+      if(sup[j] & (1ULL << i)) printf("1 ");
+      else printf("0 ");
+    }
     printf("\n");
   }
   printf("\n");
 
-  matrix_free(Len,G);
+  unsigned reps[]={0,Len};
+  size_t nreps=2;
+  MASK *cand=(MASK*)malloc(Len*sizeof(MASK));
+  unsigned *perm=support_sort(Len,nreps,reps,sup,cand);
+
+  for(i=0; i<len; ++i){
+    for(j=0; j<Len; ++j){
+      if(cand[j] & (1ULL << i)) printf("1 ");
+      else printf("0 ");
+    }
+    printf("\n");
+  }
+  printf("\n");
+
+  for(i=0; i<Len; printf("%-2zu",i++));
+  printf("\n");
+  for(i=0; i<Len; printf("%-2u",perm[i++]));
+  printf("\n\n");
+
+  size_t new_nreps;
+  unsigned *new_reps=support_partition(Len,nreps,reps,&new_nreps,cand);
+
+  for(i=0; i<Len+1; printf("%-3u",new_reps[i++]));
+  printf("\n");
+  printf("%zu\n",new_nreps);
+
+  free(new_reps);
+  free(perm);
+  free(cand);
+  free(sup);
   matrix_free(Len,H);
+  matrix_free(Len,G);
 
   exit(EXIT_SUCCESS);
 }

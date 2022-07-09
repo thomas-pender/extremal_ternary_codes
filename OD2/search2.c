@@ -60,8 +60,8 @@ void transpose(UINT *restrict A[restrict static 1],
         for(j=0; j<len; B[i][j]=A[j][i],++j);
 }
 
-void corrs(UINT a[restrict static 1], 
-           UINT corr[restrict static 1], 
+void corrs(UINT a[restrict static 1],
+           UINT corr[restrict static 1],
            unsigned len)
 {
     size_t i,j;
